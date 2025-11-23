@@ -1,0 +1,69 @@
+ /* Import Font Awesome for icons */
+        @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css');
+
+        .footer {
+            position: fixed; /* Rend le pied de page fixe */
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            background-color: darkblue; /* Couleur de fond du pied de page */
+            color: #333333; /* Couleur du texte */
+            text-align: center;
+            text-decoration: none !important;
+            padding: 5px 0;
+            font-size: 10px;
+            border-top: 1px solid #e0e0e0; /* Bordure supérieure */
+            z-index: 1000; /* Assure que le footer est au-dessus des autres éléments */
+            display: flex; /* Utilisation de flexbox pour aligner les éléments */
+            flex-wrap: wrap; /* Permet aux éléments de passer à la ligne si l'espace est insuffisant */
+            justify-content: center; /* Centre les éléments horizontalement */
+            align-items: center; /* Centre les éléments verticalement */
+            gap: 20px; /* Espace entre les éléments */
+        }
+        .footer p {
+            margin: 0; /* Supprime la marge par défaut des paragraphes */
+            flex-basis: 100%; /* Le copyright prend toute la largeur */
+            order: 2; /* Place le copyright en bas */
+        }
+        .footer-item {
+            display: flex;
+            align-items: center;
+            text-decoration: none !important;
+
+            font-size: 10px;
+        }
+        .footer-item i {
+            margin-right: 5px;
+            color: #e3dddd !important; /* Couleur des icônes */
+        }
+        .footer-item:hover {
+            color: white; /* Couleur au survol */
+        }
+        .footer-social-link {
+            font-size: 15px; /* Taille des icônes sociales */
+            color: #ece2e2;
+            margin: 0 8px; /* Espace entre les icônes sociales */
+            transition: color 0.3s ease;
+        }
+        .footer-social-link:hover {
+            color: white; /* Couleur au survol */
+        }
+
+        /* Style pour le bouton lien */
+        .button-link {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: darkblue; /* Couleur de fond du bouton */
+            color: white !important; /* Texte blanc, !important pour forcer */
+            text-align: center;
+            text-decoration: none !important; /* Supprime le soulignement du lien, avec !important */
+            font-size: 16px;
+            border-radius: 5px;
+            transition: background-color 0.3s ease; /* Effet de transition au survol */
+            border: none; /* Pas de bordure par défaut */
+            cursor: pointer; /* Curseur pointeur */
+        }
+        .button-link:hover {
+            background-color: darkorange; /* Couleur au survol */
+        }
+        

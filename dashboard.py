@@ -1,272 +1,456 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-import seaborn as sns
 import matplotlib.pyplot as plt
+import seaborn as sns
 import folium
-from folium.plugins import HeatMap
+import numpy as np
+
 from streamlit_folium import st_folium
-import openpyxl
 
 
 def dashboard_page():
 
-    # =========================================================
+    # =====================================================
     # CONFIGURATION PAGE
-    # =========================================================
+    # =====================================================
 
-    st.title("📊 Dashboard Intelligent des Débits Réseau")
+    st.title(
+        "📊 Tableau de Bord Réseau"
+    )
 
     st.markdown("""
-    Analyse avancée des performances réseau à Bonamoussadi
-    grâce à l’Intelligence Artificielle.
+    Supervision intelligente des performances réseau 
+    à Bonamoussadi grâce à l’Intelligence Artificielle.
     """)
 
     st.markdown("---")
 
-    # =========================================================
-    # UPLOAD DATASET
-    # =========================================================
+    # =====================================================
+    # CHARGEMENT FICHIER
+    # =====================================================
 
-    uploaded_file = st.file_uploader("Choisissez un fichier EXCEL ou CSV", type=["xlsx", "csv", "xlsm"])
-    
-    if uploaded_file is not None:
-        try:
-            # Déterminer le type de fichier et le lire
-            if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file, sep=";", on_bad_lines='skip')
-                sheets = [None] # Il n'y a pas de feuille pour les fichiers CSV
-            elif uploaded_file.name.endswith('.xlsx') or uploaded_file.name.endswith('.xlsm'):
-                # Lecture pour obtenir les noms des feuilles de calcul
-                xls = pd.ExcelFile(uploaded_file)
-                sheets = xls.sheet_names
-                
-                # Permettre à l'utilisateur de choisir la feuille
-                sheet_name = st.sidebar.selectbox("Sélectionnez la feuille de calcul :", sheets)
-                
-                # Lire les données de la feuille sélectionnée
-                df = pd.read_excel(uploaded_file, sheet_name=sheet_name, engine='openpyxl')
-            
-            else:
-                st.error("Format de fichier non pris en charge. Veuillez télécharger un fichier CSV ou Excel.")
-                return
+    uploaded_file = st.file_uploader(
 
-        except Exception as e:
-            st.error(f"Erreur lors du chargement ou de la lecture du fichier. Assurez-vous que le nom de la feuille de calcul est correct ou que les données sont bien formatées. Détails : {e}")
-            return
+        "📂 Charger un Dataset",
 
-    # =========================================================
-    # PARAMÈTRES
-    # =========================================================
+        type=["xlsx", "xlsm", "csv"]
+    )
 
-    TARGET_COL = "Avg throughput (ETSI A)"
+    if uploaded_file is None:
 
-    FEATURES = [
-        "AvgRSRP",
-        "AvgRSRQ",
-        "SINR"
-    ]
+        st.info(
+            "Veuillez charger un fichier."
+        )
 
-    LAT_COL = "Test start latitude"
+        return
 
-    LON_COL = "Test start longitude"
+    # =====================================================
+    # LECTURE DATASET
+    # =====================================================
 
-    TIME_COL = "Test start time"
+    try:
 
-    SEUIL_DEBIT = 250000
+        # ---------------- CSV ----------------
 
-    # =========================================================
-    # NETTOYAGE
-    # =========================================================
+        if uploaded_file.name.endswith(".csv"):
 
-    df[TARGET_COL] = pd.to_numeric(
-        df[TARGET_COL],
+            df = pd.read_csv(
+                uploaded_file
+            )
+
+        # ---------------- EXCEL ----------------
+
+        else:
+
+            excel_file = pd.ExcelFile(
+
+                uploaded_file,
+
+                engine="openpyxl"
+            )
+
+            sheet_names = excel_file.sheet_names
+
+            selected_sheet = st.sidebar.selectbox(
+
+                "📄 Choisir une feuille Excel",
+
+                sheet_names
+            )
+
+            df = pd.read_excel(
+
+                excel_file,
+
+                sheet_name=selected_sheet
+            )
+
+    except Exception as e:
+
+        st.error(
+            f"Erreur chargement fichier : {e}"
+        )
+
+        return
+
+    # =====================================================
+    # VÉRIFICATION DATAFRAME
+    # =====================================================
+
+    if df is None or df.empty:
+
+        st.warning(
+            "Le dataset est vide."
+        )
+
+        return
+
+    # =====================================================
+    # COLONNES PAR DÉFAUT
+    # =====================================================
+
+    default_cols = {
+
+        "throughput": "Avg throughput (ETSI A)",
+
+        "time": "Test start time",
+
+        "latitude": "Test start latitude",
+
+        "longitude": "Test start longitude"
+    }
+
+    st.sidebar.header(
+        "⚙ Paramètres"
+    )
+
+    throughput_col = st.sidebar.selectbox(
+
+        "📡 Colonne Débit",
+
+        options=df.columns,
+
+        index=(
+            df.columns.get_loc(
+                default_cols["throughput"]
+            )
+
+            if default_cols["throughput"] in df.columns
+
+            else 0
+        )
+    )
+
+    time_col = st.sidebar.selectbox(
+
+        "⏱ Colonne Temps",
+
+        options=df.columns,
+
+        index=(
+            df.columns.get_loc(
+                default_cols["time"]
+            )
+
+            if default_cols["time"] in df.columns
+
+            else 0
+        )
+    )
+
+    lat_col = st.sidebar.selectbox(
+
+        "🌍 Colonne Latitude",
+
+        options=df.columns,
+
+        index=(
+            df.columns.get_loc(
+                default_cols["latitude"]
+            )
+
+            if default_cols["latitude"] in df.columns
+
+            else 0
+        )
+    )
+
+    lon_col = st.sidebar.selectbox(
+
+        "🌍 Colonne Longitude",
+
+        options=df.columns,
+
+        index=(
+            df.columns.get_loc(
+                default_cols["longitude"]
+            )
+
+            if default_cols["longitude"] in df.columns
+
+            else 0
+        )
+    )
+
+    # =====================================================
+    # NETTOYAGE DONNÉES
+    # =====================================================
+
+    df[throughput_col] = pd.to_numeric(
+
+        df[throughput_col],
+
         errors="coerce"
     )
 
-    df["debit_class"] = df[TARGET_COL].apply(
-
-        lambda x:
-        "Succès"
-        if x >= SEUIL_DEBIT
-        else "Échec"
-    )
-
     df = df.dropna(
+
         subset=[
-            TARGET_COL,
-            LAT_COL,
-            LON_COL
+            throughput_col
         ]
     )
 
-    # =========================================================
+    # =====================================================
+    # CONVERSION Mbps
+    # =====================================================
+
+    df["throughput_mbps"] = (
+
+        df[throughput_col] * 8
+
+    ) / (1024 * 1024)
+
+
+    # =====================================================
     # APERÇU DATASET
-    # =========================================================
+    # =====================================================
 
-    st.header("📋 Aperçu du Dataset")
+    st.header(
+        "📋 Aperçu des Données"
+    )
 
-    st.dataframe(df.head(20))
+    st.dataframe(
+        df.head(20)
+    )
 
     st.markdown("---")
 
-    # =========================================================
-    # KPI PRINCIPAUX
-    # =========================================================
 
-    st.header("📊 Indicateurs Clés")
+    # =====================================================
+    # KPI
+    # =====================================================
 
-    avg_throughput = df[TARGET_COL].mean()
+    avg_mbps = df["throughput_mbps"].mean()
 
-    max_throughput = df[TARGET_COL].max()
+    max_mbps = df["throughput_mbps"].max()
 
-    min_throughput = df[TARGET_COL].min()
+    min_mbps = df["throughput_mbps"].min()
 
-    success_rate = (
+    stable_rate = (
+
         (
-            df["debit_class"] == "Succès"
+            df["throughput_mbps"] >= 2
         ).mean()
+
     ) * 100
+
+    st.header(
+        "📌 Indicateurs Clés"
+    )
 
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
 
         st.metric(
+
             "📡 Débit Moyen",
-            f"{avg_throughput:.2f} B/s"
+
+            f"{avg_mbps:.2f} Mbps"
         )
 
     with col2:
 
         st.metric(
+
             "🚀 Débit Maximum",
-            f"{max_throughput:.2f} B/s"
+
+            f"{max_mbps:.2f} Mbps"
         )
 
     with col3:
 
         st.metric(
-            "⚠ Débit Minimum",
-            f"{min_throughput:.2f} B/s"
+
+            "📉 Débit Minimum",
+
+            f"{min_mbps:.2f} Mbps"
         )
 
     with col4:
 
         st.metric(
-            "✅ Taux de Succès",
-            f"{success_rate:.2f}%"
+
+            "✅ Réseau Stable",
+
+            f"{stable_rate:.1f}%"
         )
 
     st.markdown("---")
 
-    # =========================================================
-    # DISTRIBUTION DES DÉBITS
-    # =========================================================
-
-    st.header("📈 Distribution des Débits")
-
-    fig = px.histogram(
-
-        df,
-
-        x=TARGET_COL,
-
-        nbins=50,
-
-        title="Distribution des Débits Réseau",
-
-        marginal="box"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    st.markdown("---")
-
-    # =========================================================
+    # =====================================================
     # COURBE TEMPORELLE
-    # =========================================================
+    # =====================================================
 
-    st.header("⏳ Évolution du Débit dans le Temps")
+    st.header(
+        "📈 Évolution du Débit"
+    )
 
     try:
 
-        df[TIME_COL] = pd.to_datetime(
-            df[TIME_COL]
+        df[time_col] = pd.to_datetime(
+
+            df[time_col]
         )
 
         df_sorted = df.sort_values(
-            TIME_COL
+            by=time_col
         )
 
-        fig = px.line(
-
-            df_sorted,
-
-            x=TIME_COL,
-
-            y=TARGET_COL,
-
-            title="Variation Temporelle du Débit"
+        fig, ax = plt.subplots(
+            figsize=(12, 5)
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
+        ax.plot(
+
+            df_sorted[time_col],
+
+            df_sorted["throughput_mbps"]
         )
+
+        ax.set_xlabel(
+            "Temps"
+        )
+
+        ax.set_ylabel(
+            "Débit (Mbps)"
+        )
+
+        ax.set_title(
+            "Évolution du Débit Réseau"
+        )
+
+        st.pyplot(fig)
 
     except:
 
         st.warning(
-            "Impossible d'analyser les dates."
+            "Impossible d'afficher "
+            "la courbe temporelle."
         )
 
     st.markdown("---")
 
-    # =========================================================
-    # RÉPARTITION SUCCÈS / ÉCHEC
-    # =========================================================
+    # =====================================================
+    # DISTRIBUTION DÉBITS
+    # =====================================================
 
-    st.header("🎯 Répartition des Classes")
-
-    fig = px.pie(
-
-        df,
-
-        names="debit_class",
-
-        title="Succès vs Échec"
+    st.header(
+        "📊 Distribution des Débits"
     )
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
+    fig, ax = plt.subplots(
+        figsize=(10, 5)
     )
+
+    sns.histplot(
+
+        df["throughput_mbps"],
+
+        bins=40,
+
+        kde=True,
+
+        ax=ax
+    )
+
+    ax.set_xlabel(
+        "Débit (Mbps)"
+    )
+
+    ax.set_title(
+        "Distribution des Débits"
+    )
+
+    st.pyplot(fig)
 
     st.markdown("---")
 
-    # =========================================================
-    # MATRICE DE CORRÉLATION
-    # =========================================================
+    # =====================================================
+    # BOXPLOT
+    # =====================================================
 
-    st.header("🔥 Heatmap des Corrélations")
+    st.header(
+        "📦 Boxplot des Débits"
+    )
 
-    corr = df[
-        FEATURES + [TARGET_COL]
+    fig, ax = plt.subplots(
+        figsize=(10, 3)
+    )
+
+    sns.boxplot(
+
+        x=df["throughput_mbps"],
+
+        ax=ax
+    )
+
+    ax.set_title(
+        "Détection des Valeurs Extrêmes"
+    )
+
+    st.pyplot(fig)
+
+    st.markdown("---")
+
+   # =====================================================
+    # MATRICE CORRÉLATION
+    # =====================================================
+
+    st.header(
+        "🔥 Matrice de Corrélation"
+    )
+
+    corr_features = [
+
+        "AvgRSRP",
+
+        "AvgRSRQ",
+
+        "SINR",
+
+        "throughput_mbps"
+    ]
+
+    # garder seulement colonnes existantes
+    corr_features = [
+
+        col for col in corr_features
+
+        if col in df.columns
+    ]
+
+    corr_matrix = df[
+        corr_features
     ].corr()
 
     fig, ax = plt.subplots(
-        figsize=(8, 5)
+        figsize=(7, 5)
     )
 
     sns.heatmap(
 
-        corr,
+        corr_matrix,
 
         annot=True,
 
@@ -274,350 +458,166 @@ def dashboard_page():
 
         fmt=".2f",
 
+        linewidths=0.5,
+
         ax=ax
+    )
+
+    ax.set_title(
+        "Corrélation des Paramètres Réseau"
+    )
+
+    st.pyplot(fig)
+    st.markdown("---")
+
+    # =====================================================
+    # CARTE FOLIUM
+    # =====================================================
+
+    st.header(
+        "🗺 Carte des Performances Réseau"
+    )
+
+    try:
+
+        df = df.dropna(
+
+            subset=[
+                lat_col,
+                lon_col
+            ]
+        )
+
+        center = [
+
+            df[lat_col].mean(),
+
+            df[lon_col].mean()
+        ]
+
+        m = folium.Map(
+
+            location=center,
+
+            zoom_start=13
+        )
+
+        for _, row in df.iterrows():
+
+            color = (
+
+                "green"
+
+                if row["throughput_mbps"] >= 2
+
+                else "red"
+            )
+
+            folium.CircleMarker(
+
+                location=[
+
+                    row[lat_col],
+
+                    row[lon_col]
+                ],
+
+                radius=5,
+
+                color=color,
+
+                fill=True,
+
+                fill_color=color,
+
+                fill_opacity=0.7,
+
+                tooltip=f"""
+                Débit :
+                {row['throughput_mbps']:.2f} Mbps
+                """
+            ).add_to(m)
+
+        st_folium(
+
+            m,
+
+            width=1000,
+
+            height=500
+        )
+
+    except:
+
+        st.warning(
+            "Impossible d'afficher "
+            "la carte géographique."
+        )
+
+    st.markdown("---")
+
+    # =====================================================
+    # QUALITÉ RÉSEAU
+    # =====================================================
+
+    st.header(
+        "📶 Qualité du Réseau"
+    )
+
+    quality_counts = pd.cut(
+
+        df["throughput_mbps"],
+
+        bins=[0, 2, 5, 10, 1000],
+
+        labels=[
+            "Faible",
+            "Moyen",
+            "Bon",
+            "Excellent"
+        ]
+
+    ).value_counts()
+
+    fig, ax = plt.subplots(
+        figsize=(8, 5)
+    )
+
+    ax.pie(
+
+        quality_counts,
+
+        labels=quality_counts.index,
+
+        autopct="%1.1f%%"
+    )
+
+    ax.set_title(
+        "Répartition Qualité Réseau"
     )
 
     st.pyplot(fig)
 
     st.markdown("---")
 
-    # =========================================================
-    # ANALYSE DES VARIABLES RADIO
-    # =========================================================
-
-    st.header("📡 Analyse des Paramètres Radio")
-
-    selected_feature = st.selectbox(
-
-        "Choisir un paramètre :",
-
-        FEATURES
-    )
-
-    fig = px.scatter(
-
-        df,
-
-        x=selected_feature,
-
-        y=TARGET_COL,
-
-        color="debit_class",
-
-        title=f"{selected_feature} vs Débit",
-
-        opacity=0.7
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    st.markdown("---")
-
-    # =========================================================
-    # BOXPLOT
-    # =========================================================
-
-    st.header("📦 Détection des Valeurs Extrêmes")
-
-    fig = px.box(
-
-        df,
-
-        y=TARGET_COL,
-
-        color="debit_class",
-
-        title="Boxplot des Débits"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    st.markdown("---")
-
-    # =========================================================
-    # CARTE GÉOGRAPHIQUE
-    # =========================================================
-
-    st.header("🗺 Carte des Performances Réseau")
-
-    center = [
-        df[LAT_COL].mean(),
-        df[LON_COL].mean()
-    ]
-
-    m = folium.Map(
-
-        location=center,
-
-        zoom_start=13
-    )
-
-    for _, row in df.iterrows():
-
-        color = (
-            "green"
-            if row[TARGET_COL] >= SEUIL_DEBIT
-            else "red"
-        )
-
-        folium.CircleMarker(
-
-            location=[
-                row[LAT_COL],
-                row[LON_COL]
-            ],
-
-            radius=5,
-
-            color=color,
-
-            fill=True,
-
-            fill_color=color,
-
-            fill_opacity=0.7,
-
-            tooltip=f"""
-            Débit :
-            {row[TARGET_COL]:.2f} B/s
-            """
-        ).add_to(m)
-
-    st_folium(
-        m,
-        width=1200,
-        height=500
-    )
-
-    st.markdown("---")
-
-    # =========================================================
-    # HEATMAP GÉOGRAPHIQUE
-    # =========================================================
-
-    st.header("🔥 Heatmap Géographique")
-
-    heat_data = [
-
-        [
-            row[LAT_COL],
-            row[LON_COL],
-            row[TARGET_COL]
-        ]
-
-        for _, row in df.iterrows()
-    ]
-
-    heat_map = folium.Map(
-
-        location=center,
-
-        zoom_start=13
-    )
-
-    HeatMap(
-        heat_data
-    ).add_to(heat_map)
-
-    st_folium(
-        heat_map,
-        width=1200,
-        height=500
-    )
-
-    st.markdown("---")
-
-    # =========================================================
-    # COMPARAISON MODÈLES IA
-    # =========================================================
-
-    st.header("🤖 Comparaison des Modèles IA")
-
-    reg_models = pd.DataFrame({
-
-        "Modèle": [
-            "Linear Regression",
-            "Random Forest",
-            "Gradient Boosting"
-        ],
-
-        "RMSE": [
-            32000,
-            18000,
-            21000
-        ],
-
-        "R²": [
-            0.71,
-            0.91,
-            0.88
-        ]
-    })
-
-    fig = go.Figure()
-
-    fig.add_trace(
-
-        go.Bar(
-
-            x=reg_models["Modèle"],
-
-            y=reg_models["RMSE"],
-
-            name="RMSE"
-        )
-    )
-
-    fig.add_trace(
-
-        go.Scatter(
-
-            x=reg_models["Modèle"],
-
-            y=reg_models["R²"],
-
-            mode="lines+markers",
-
-            name="R²"
-        )
-    )
-
-    fig.update_layout(
-        title="Comparaison des Modèles de Régression"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    st.markdown("---")
-
-    # =========================================================
-    # CLASSIFICATION IA
-    # =========================================================
-
-    st.header("🧠 Performances des Modèles de Classification")
-
-    clf_models = pd.DataFrame({
-
-        "Modèle": [
-            "Logistic Regression",
-            "Random Forest",
-            "Gradient Boosting"
-        ],
-
-        "Accuracy": [
-            0.81,
-            0.95,
-            0.92
-        ],
-
-        "F1-score": [
-            0.80,
-            0.94,
-            0.91
-        ]
-    })
-
-    fig = go.Figure()
-
-    fig.add_trace(
-
-        go.Bar(
-
-            x=clf_models["Modèle"],
-
-            y=clf_models["Accuracy"],
-
-            name="Accuracy"
-        )
-    )
-
-    fig.add_trace(
-
-        go.Scatter(
-
-            x=clf_models["Modèle"],
-
-            y=clf_models["F1-score"],
-
-            mode="lines+markers",
-
-            name="F1-score"
-        )
-    )
-
-    fig.update_layout(
-        title="Comparaison des Modèles de Classification"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    st.markdown("---")
-
-    # =========================================================
-    # IMPORTANCE DES VARIABLES
-    # =========================================================
-
-    st.header("📶 Importance des Variables Réseau")
-
-    importance_df = pd.DataFrame({
-
-        "Variable": FEATURES,
-
-        "Importance": [
-            0.42,
-            0.31,
-            0.27
-        ]
-    })
-
-    fig = px.bar(
-
-        importance_df,
-
-        x="Importance",
-
-        y="Variable",
-
-        orientation="h",
-
-        title="Importance des Variables"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    st.markdown("---")
-
-    # =========================================================
+    # =====================================================
     # CONCLUSION
-    # =========================================================
+    # =====================================================
 
-    st.header("🧠 Conclusion Générale")
+    st.header(
+        "🧠 Conclusion Dashboard"
+    )
 
-    st.success("""
-    ✔ Les modèles d’Intelligence Artificielle permettent
-    d’analyser efficacement les performances réseau.
+    st.success(f"""
+    ✔ Débit moyen observé :
+    {avg_mbps:.2f} Mbps
 
-    ✔ Les paramètres radio influencent directement
-    les débits de téléversement.
+    ✔ Taux de stabilité réseau :
+    {stable_rate:.1f}%
 
-    ✔ Random Forest présente les meilleures performances
-    parmi les modèles testés.
+    ✔ Les données réseau montrent des variations 
+    importantes selon les zones et périodes.
 
-    ✔ Les heatmaps et cartes géographiques permettent
-    de localiser les zones de faibles performances.
+    ✔ Le Dashboard permet une supervision 
+    intelligente des performances réseau.
     """)

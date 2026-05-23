@@ -4,111 +4,318 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
-
-from sklearn.metrics import (
-    confusion_matrix,
-    ConfusionMatrixDisplay,
-    mean_squared_error,
-    r2_score
-)
+from sklearn.model_selection import (train_test_split)
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import (StandardScaler)
+from sklearn.linear_model import (LinearRegression,LogisticRegression)
+from sklearn.ensemble import (RandomForestRegressor,GradientBoostingRegressor,RandomForestClassifier,GradientBoostingClassifier)
+from sklearn.metrics import (mean_squared_error,r2_score,accuracy_score,f1_score,confusion_matrix,ConfusionMatrixDisplay)
 
 
 def page_analyse_ia():
 
+    # TITRE
     st.title("🤖 Analyse des Modèles d'Intelligence Artificielle")
-
-    st.markdown("""
-    Cette section présente les performances des différents modèles de 
-    Machine Learning utilisés pour l’analyse des débits réseau.
-    """)
-
+    st.markdown("""Cette section présente une analyse complète des modèles de Machine Learning utilisés pour prédire les performances du réseau mobile à Bonamoussadi.""")
     st.markdown("---")
 
-    # =====================================================
-    # CHARGEMENT DES DONNÉES
-    # =====================================================
-
-    uploaded_file = st.file_uploader(
-        "📂 Charger le dataset utilisé pour l'analyse IA",
-        type=["xlsx", "csv"]
-    )
-
+    # UPLOAD DATASET
+    uploaded_file = st.file_uploader("📂 Charger un Dataset", type=["xlsx", "xlsm", "csv"])
     if uploaded_file is None:
-
-        st.info(
-            "Veuillez charger un dataset pour afficher l'analyse IA."
-        )
-
+        st.info("Veuillez charger un dataset.")
         return
 
-    # =====================================================
-    # LECTURE DU DATASET
-    # =====================================================
-
+    # LECTURE DATASET
     try:
-
         if uploaded_file.name.endswith(".csv"):
-
             df = pd.read_csv(uploaded_file)
-
         else:
-
-            df = pd.read_excel(uploaded_file)
-
+            excel_file = pd.ExcelFile(uploaded_file, engine="openpyxl")
+            sheet_names = excel_file.sheet_names
+            selected_sheet = st.sidebar.selectbox("📄 Choisir une feuille Excel",sheet_names)
+            df = pd.read_excel(excel_file,sheet_name=selected_sheet)
     except Exception as e:
-
-        st.error(f"Erreur lors du chargement : {e}")
-
+        st.error(f"Erreur chargement fichier : {e}")
         return
 
-    # =====================================================
     # PARAMÈTRES
-    # =====================================================
 
     FEATURES = [
+
         "AvgRSRP",
+
         "AvgRSRQ",
+
         "SINR"
     ]
 
     TARGET_REG = "Avg throughput (ETSI A)"
 
-    # seuil 2 Mbps
-    SEUIL_DEBIT = 250000
+    SEUIL_DEBIT = 256000
 
     # =====================================================
     # NETTOYAGE
     # =====================================================
 
     df[TARGET_REG] = pd.to_numeric(
+
         df[TARGET_REG],
+
         errors="coerce"
     )
 
     df["debit_class"] = df[TARGET_REG].apply(
-        lambda x: 1 if x >= SEUIL_DEBIT else 0
+
+        lambda x:
+        1 if x >= SEUIL_DEBIT else 0
     )
 
     df_model = df[
         FEATURES + [TARGET_REG, "debit_class"]
     ].dropna()
 
-    st.success("Dataset chargé avec succès ✅")
-
-    st.markdown("---")
-
     # =====================================================
     # APERÇU DATASET
     # =====================================================
 
+    st.success(
+        "Dataset chargé avec succès ✅"
+    )
+
     st.header("📋 Aperçu du Dataset")
 
-    st.dataframe(df_model.head(20))
+    st.dataframe(
+        df_model.head(20)
+    )
 
     st.markdown("---")
 
     # =====================================================
-    # MATRICE DE CORRÉLATION
+    # MATRICE X ET y
+    # =====================================================
+
+    X = df_model[FEATURES]
+
+    y_reg = df_model[TARGET_REG]
+
+    y_clf = df_model["debit_class"]
+
+    # =====================================================
+    # TRAIN TEST SPLIT
+    # =====================================================
+
+    X_train, X_test, y_reg_train, y_reg_test = train_test_split(
+
+        X,
+
+        y_reg,
+
+        test_size=0.2,
+
+        random_state=42
+    )
+
+    _, _, y_clf_train, y_clf_test = train_test_split(
+
+        X,
+
+        y_clf,
+
+        test_size=0.2,
+
+        random_state=42
+    )
+
+    # =====================================================
+    # MODÈLES RÉGRESSION
+    # =====================================================
+
+    reg_models = {
+
+        "Linear Regression": Pipeline([
+
+            ("scaler", StandardScaler()),
+
+            ("model", LinearRegression())
+        ]),
+
+        "Random Forest": Pipeline([
+
+            ("model", RandomForestRegressor(
+
+                n_estimators=200,
+
+                random_state=42
+            ))
+        ]),
+
+        "Gradient Boosting": Pipeline([
+
+            ("model", GradientBoostingRegressor(
+
+                random_state=42
+            ))
+        ])
+    }
+
+    # =====================================================
+    # MODÈLES CLASSIFICATION
+    # =====================================================
+
+    clf_models = {
+
+        "Logistic Regression": Pipeline([
+
+            ("scaler", StandardScaler()),
+
+            ("model", LogisticRegression(
+
+                max_iter=1000
+            ))
+        ]),
+
+        "Random Forest": Pipeline([
+
+            ("model", RandomForestClassifier(
+
+                n_estimators=200,
+
+                random_state=42
+            ))
+        ]),
+
+        "Gradient Boosting": Pipeline([
+
+            ("model", GradientBoostingClassifier(
+
+                random_state=42
+            ))
+        ])
+    }
+
+    # =====================================================
+    # ENTRAÎNEMENT RÉGRESSION
+    # =====================================================
+
+    reg_results = []
+
+    best_reg_model = None
+
+    best_r2 = -999
+
+    for name, model in reg_models.items():
+
+        model.fit(
+            X_train,
+            y_reg_train
+        )
+
+        preds = model.predict(
+            X_test
+        )
+
+        rmse = np.sqrt(
+
+            mean_squared_error(
+                y_reg_test,
+                preds
+            )
+        )
+
+        r2 = r2_score(
+            y_reg_test,
+            preds
+        )
+
+        reg_results.append({
+
+            "Modèle": name,
+
+            "RMSE": rmse,
+
+            "R²": r2
+        })
+
+        if r2 > best_r2:
+
+            best_r2 = r2
+
+            best_reg_model = model
+
+    reg_results = pd.DataFrame(
+        reg_results
+    )
+
+    # =====================================================
+    # ENTRAÎNEMENT CLASSIFICATION
+    # =====================================================
+
+    clf_results = []
+
+    best_clf_model = None
+
+    best_acc = -999
+
+    for name, model in clf_models.items():
+
+        model.fit(
+            X_train,
+            y_clf_train
+        )
+
+        preds = model.predict(
+            X_test
+        )
+
+        acc = accuracy_score(
+            y_clf_test,
+            preds
+        )
+
+        f1 = f1_score(
+            y_clf_test,
+            preds
+        )
+
+        clf_results.append({
+
+            "Modèle": name,
+
+            "Accuracy": acc,
+
+            "F1-score": f1
+        })
+
+        if acc > best_acc:
+
+            best_acc = acc
+
+            best_clf_model = model
+
+    clf_results = pd.DataFrame(
+        clf_results
+    )
+
+    # =====================================================
+    # AFFICHAGE TABLEAUX
+    # =====================================================
+
+    st.header("📊 Résultats Régression")
+
+    st.dataframe(
+        reg_results
+    )
+
+    st.header("📊 Résultats Classification")
+
+    st.dataframe(
+        clf_results
+    )
+
+    st.markdown("---")
+
+    # =====================================================
+    # MATRICE CORRÉLATION
     # =====================================================
 
     st.header("🔥 Matrice de Corrélation")
@@ -117,18 +324,21 @@ def page_analyse_ia():
         FEATURES + [TARGET_REG]
     ].corr()
 
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    sns.heatmap(
-        corr,
-        annot=True,
-        cmap="coolwarm",
-        fmt=".2f",
-        ax=ax
+    fig, ax = plt.subplots(
+        figsize=(8, 5)
     )
 
-    ax.set_title(
-        "Corrélation entre les paramètres réseau"
+    sns.heatmap(
+
+        corr,
+
+        annot=True,
+
+        cmap="coolwarm",
+
+        fmt=".2f",
+
+        ax=ax
     )
 
     st.pyplot(fig)
@@ -136,111 +346,27 @@ def page_analyse_ia():
     st.markdown("---")
 
     # =====================================================
-    # DISTRIBUTION DU DÉBIT
+    # DISTRIBUTION DÉBITS
     # =====================================================
 
     st.header("📈 Distribution des Débits")
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(
+        figsize=(8, 5)
+    )
 
     sns.histplot(
+
         df_model[TARGET_REG],
+
         bins=40,
+
         kde=True,
+
         ax=ax
     )
 
-    ax.set_title(
-        "Distribution des débits de téléversement"
-    )
-
-    ax.set_xlabel("Débit")
-
     st.pyplot(fig)
-
-    st.markdown("---")
-
-    # =====================================================
-    # CHARGEMENT DES MODÈLES
-    # =====================================================
-
-    st.header("🤖 Comparaison des Modèles IA")
-
-    try:
-
-        reg_model = joblib.load(
-            "model/model_regression.joblib"
-        )
-
-        clf_model = joblib.load(
-            "model/model.joblib"
-        )
-
-    except Exception as e:
-
-        st.warning(
-            f"Impossible de charger les modèles : {e}"
-        )
-
-        return
-
-    # =====================================================
-    # SIMULATION DES SCORES
-    # =====================================================
-
-    reg_results = pd.DataFrame({
-
-        "Modèle": [
-            "Linear Regression",
-            "Random Forest",
-            "Gradient Boosting"
-        ],
-
-        "RMSE": [
-            32000,
-            18000,
-            21000
-        ],
-
-        "R²": [
-            0.71,
-            0.91,
-            0.88
-        ]
-    })
-
-    clf_results = pd.DataFrame({
-
-        "Modèle": [
-            "Logistic Regression",
-            "Random Forest",
-            "Gradient Boosting"
-        ],
-
-        "Accuracy": [
-            0.81,
-            0.95,
-            0.92
-        ],
-
-        "F1-score": [
-            0.80,
-            0.94,
-            0.91
-        ]
-    })
-
-    # =====================================================
-    # TABLEAUX DES RÉSULTATS
-    # =====================================================
-
-    st.subheader("📊 Performances des modèles de Régression")
-
-    st.dataframe(reg_results)
-
-    st.subheader("📊 Performances des modèles de Classification")
-
-    st.dataframe(clf_results)
 
     st.markdown("---")
 
@@ -250,15 +376,15 @@ def page_analyse_ia():
 
     st.header("📉 Comparaison RMSE")
 
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    ax.bar(
-        reg_results["Modèle"],
-        reg_results["RMSE"]
+    fig, ax = plt.subplots(
+        figsize=(8, 5)
     )
 
-    ax.set_title(
-        "Comparaison des erreurs RMSE"
+    ax.bar(
+
+        reg_results["Modèle"],
+
+        reg_results["RMSE"]
     )
 
     ax.set_ylabel("RMSE")
@@ -273,16 +399,17 @@ def page_analyse_ia():
 
     st.header("📈 Comparaison R²")
 
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    ax.plot(
-        reg_results["Modèle"],
-        reg_results["R²"],
-        marker="o"
+    fig, ax = plt.subplots(
+        figsize=(8, 5)
     )
 
-    ax.set_title(
-        "Comparaison des scores R²"
+    ax.plot(
+
+        reg_results["Modèle"],
+
+        reg_results["R²"],
+
+        marker="o"
     )
 
     ax.set_ylabel("R²")
@@ -295,17 +422,17 @@ def page_analyse_ia():
     # COMPARAISON ACCURACY
     # =====================================================
 
-    st.header("🎯 Accuracy des modèles")
+    st.header("🎯 Accuracy des Modèles")
 
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    ax.bar(
-        clf_results["Modèle"],
-        clf_results["Accuracy"]
+    fig, ax = plt.subplots(
+        figsize=(8, 5)
     )
 
-    ax.set_title(
-        "Accuracy des modèles IA"
+    ax.bar(
+
+        clf_results["Modèle"],
+
+        clf_results["Accuracy"]
     )
 
     ax.set_ylabel("Accuracy")
@@ -315,21 +442,22 @@ def page_analyse_ia():
     st.markdown("---")
 
     # =====================================================
-    # COMPARAISON F1 SCORE
+    # COMPARAISON F1
     # =====================================================
 
     st.header("🚀 Comparaison F1-score")
 
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    ax.plot(
-        clf_results["Modèle"],
-        clf_results["F1-score"],
-        marker="o"
+    fig, ax = plt.subplots(
+        figsize=(8, 5)
     )
 
-    ax.set_title(
-        "Comparaison des F1-score"
+    ax.plot(
+
+        clf_results["Modèle"],
+
+        clf_results["F1-score"],
+
+        marker="o"
     )
 
     ax.set_ylabel("F1-score")
@@ -339,21 +467,34 @@ def page_analyse_ia():
     st.markdown("---")
 
     # =====================================================
-    # MATRICE DE CONFUSION
+    # MATRICE CONFUSION
     # =====================================================
 
     st.header("🧩 Matrice de Confusion")
 
-    cm = np.array([
-        [120, 8],
-        [10, 145]
-    ])
+    best_preds = best_clf_model.predict(
+        X_test
+    )
 
-    fig, ax = plt.subplots(figsize=(6, 5))
+    cm = confusion_matrix(
+
+        y_clf_test,
+
+        best_preds
+    )
+
+    fig, ax = plt.subplots(
+        figsize=(6, 5)
+    )
 
     disp = ConfusionMatrixDisplay(
+
         confusion_matrix=cm,
-        display_labels=["Échec", "Succès"]
+
+        display_labels=[
+            "Échec",
+            "Succès"
+        ]
     )
 
     disp.plot(ax=ax)
@@ -368,26 +509,134 @@ def page_analyse_ia():
 
     st.header("📡 Importance des Variables")
 
-    importance_df = pd.DataFrame({
+    try:
 
-        "Feature": FEATURES,
+        model = best_reg_model.named_steps["model"]
 
-        "Importance": [
-            0.42,
-            0.31,
-            0.27
-        ]
-    })
+    except:
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+        model = best_reg_model
 
-    ax.barh(
-        importance_df["Feature"],
-        importance_df["Importance"]
+    importance_df = None
+
+    # =====================================================
+    # RANDOM FOREST / BOOSTING
+    # =====================================================
+
+    if hasattr(model, "feature_importances_"):
+
+        importance_df = pd.DataFrame({
+
+            "Feature": FEATURES,
+
+            "Importance": model.feature_importances_
+        })
+
+    # =====================================================
+    # LINEAR REGRESSION
+    # =====================================================
+
+    elif hasattr(model, "coef_"):
+
+        importance_df = pd.DataFrame({
+
+            "Feature": FEATURES,
+
+            "Importance": np.abs(model.coef_)
+        })
+
+    # =====================================================
+    # AFFICHAGE
+    # =====================================================
+
+    if importance_df is not None:
+
+        importance_df = importance_df.sort_values(
+
+            by="Importance",
+
+            ascending=True
+        )
+
+        fig, ax = plt.subplots(
+            figsize=(8, 5)
+        )
+
+        ax.barh(
+
+            importance_df["Feature"],
+
+            importance_df["Importance"]
+        )
+
+        ax.set_title(
+            "Importance des Variables Réseau"
+        )
+
+        ax.set_xlabel(
+            "Importance"
+        )
+
+        st.pyplot(fig)
+
+        st.dataframe(
+            importance_df
+        )
+
+    else:
+
+        st.warning(
+            "Impossible de calculer "
+            "l’importance des variables."
+        )
+    # =====================================================
+    # RÉEL VS PRÉDIT
+    # =====================================================
+
+    st.header("📡 Débit Réel vs Débit Prédit")
+
+    y_pred = best_reg_model.predict(
+        X_test
     )
 
-    ax.set_title(
-        "Importance des paramètres réseau"
+    fig, ax = plt.subplots(
+        figsize=(6, 6)
+    )
+
+    ax.scatter(
+
+        y_reg_test,
+
+        y_pred,
+
+        alpha=0.5
+    )
+
+    ax.plot(
+
+        [
+
+            y_reg_test.min(),
+
+            y_reg_test.max()
+        ],
+
+        [
+
+            y_reg_test.min(),
+
+            y_reg_test.max()
+        ],
+
+        "r--"
+    )
+
+    ax.set_xlabel(
+        "Débit Réel"
+    )
+
+    ax.set_ylabel(
+        "Débit Prédit"
     )
 
     st.pyplot(fig)
@@ -395,55 +644,47 @@ def page_analyse_ia():
     st.markdown("---")
 
     # =====================================================
-    # DÉTECTION DES ANOMALIES
+    # SAUVEGARDE MODÈLES
     # =====================================================
 
-    st.header("🚨 Détection des Anomalies Réseau")
+    joblib.dump(
 
-    anomaly_points = np.random.choice(
-        [0, 1],
-        size=len(df_model),
-        p=[0.95, 0.05]
+        best_reg_model,
+
+        "model/model_regression.joblib"
     )
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    joblib.dump(
 
-    scatter = ax.scatter(
+        best_clf_model,
 
-        df_model["SINR"],
-
-        df_model[TARGET_REG],
-
-        c=anomaly_points,
-
-        alpha=0.6
+        "model/model_classification.joblib"
     )
-
-    ax.set_title(
-        "Anomalies détectées dans le réseau"
-    )
-
-    ax.set_xlabel("SINR")
-
-    ax.set_ylabel("Débit")
-
-    st.pyplot(fig)
-
-    st.markdown("---")
 
     # =====================================================
-    # CONCLUSION IA
+    # CONCLUSION
     # =====================================================
 
-    st.header("🧠 Conclusion de l’Analyse IA")
+    st.header("🧠 Conclusion IA")
 
-    st.success("""
-    ✔ Les modèles Random Forest et Gradient Boosting présentent 
-    les meilleures performances pour l’analyse des débits réseau.
+    best_reg_name = reg_results.loc[
+        reg_results["R²"].idxmax()
+    ]["Modèle"]
 
-    ✔ Les paramètres radio comme le SINR et le RSRP influencent 
-    fortement les performances du débit de téléversement.
+    best_clf_name = clf_results.loc[
+        clf_results["Accuracy"].idxmax()
+    ]["Modèle"]
 
-    ✔ L’Intelligence Artificielle permet d’automatiser 
-    l’analyse réseau et de détecter rapidement les anomalies.
+    st.success(f"""
+    ✔ Meilleur modèle de régression :
+    {best_reg_name}
+
+    ✔ Meilleur modèle de classification :
+    {best_clf_name}
+
+    ✔ Les paramètres radio influencent fortement 
+    les performances réseau.
+
+    ✔ L’IA permet d’automatiser l’analyse 
+    des débits réseau mobiles.
     """)
